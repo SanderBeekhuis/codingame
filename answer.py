@@ -37,6 +37,7 @@ Bot = collections.namedtuple("Bot", ['loc',
                         'movementDir',
                         'headingDir',
                         'driftAngle',
+                        'nextSectionBearing',
                         'directionChangeAfterNextCheckpoint'])
 
 #initialization input
@@ -95,11 +96,14 @@ def handleData(debugPrint = False):
     driftCorrection = min( DRIFT_CORRECTION_CAP, max (driftAngle , - DRIFT_CORRECTION_CAP))
     nextChekpointTargetDir = nextCheckpointDir + driftCorrection
 
-
     #determine target bearing of next section
     checkpointAfter = checkpoints[ nextId(nextCheckpointId) ]
     nextSectionBearing = computeAngle(checkpointloc, checkpointAfter)
 
+    #fix headingdir
+    if headingDir == -1 : # at start of the game
+        headingDir = nextCheckpointDir
+    headingDir = normalizeAngle(headingDir)
 
     #Q is it better to base this on orientattion or direction? Does it matter when we are in normal operation?
     directionChange = abs(diffAngle(nextCheckpointDir, nextSectionBearing))
@@ -111,6 +115,7 @@ def handleData(debugPrint = False):
                 movementDir=movementDir,
                 nextCheckpointDir=nextCheckpointDir,
                 driftAngle=driftAngle,
+                nextSectionBearing=nextSectionBearing,
                 directionChangeAfterNextCheckpoint=directionChange)
 
     if debugPrint:
@@ -123,7 +128,6 @@ def handleBot(botId, botData, tactic):
 
     driftCorrection = min( DRIFT_CORRECTION_CAP, max (thisBot.driftAngle , - DRIFT_CORRECTION_CAP))
     nextChekpointTargetDir = thisBot.nextCheckpointDir + driftCorrection
-
 
 
     #default target
@@ -168,6 +172,6 @@ def handleBot(botId, botData, tactic):
 print("Starting game loop", file =sys.stderr)
 # game loop
 while True:
-    bots = [handleData() for _ in range(4)]
+    bots = [handleData(debugPrint=True), handleData(), handleData(), handleData(),]
     handleBot(0, bots, tactic="fast")
     handleBot(1, bots, tactic="fast")
