@@ -5,12 +5,15 @@ import numbers
 
 #Algorithm parameters
 DRIFT_CORRECTION_CAP =20 # max correction angle for drift
-STRUGLE_FLOOR = 150
+STRUGLE_FLOOR = 100
+LOWEST_COAST =200
 TRIVAL_DRIFT_CORRECTION_BOUND = 4 #in degreees
+assert STRUGLE_FLOOR < LOWEST_COAST
 
 #Phisics constants
 TURNING_SPEED = 18
 FRICTION = 0.85
+CHECKPOINT_RADIUS = 600
 #computes smallest difference between two andles, asssumes degrees
 
 
@@ -59,6 +62,15 @@ def diffAngle(a , b):
     x = a - b
     x = normalizeAngle(x)
     return x
+
+def coast(d, v):
+    #print(str(d) + " "+ str(v), file =sys.stderr)
+    if d<v:
+        return 0
+    if v< LOWEST_COAST:
+        return float("inf")
+    return coast(d-v, v*FRICTION) + 1
+
 
 def computeAngle(fromLoc, toLoc):
     #atan2 is in (yx) format!
@@ -129,18 +141,15 @@ def handleBot(botId, botData, tactic):
     driftCorrection = min( DRIFT_CORRECTION_CAP, max (thisBot.driftAngle , - DRIFT_CORRECTION_CAP))
     nextChekpointTargetDir = thisBot.nextCheckpointDir + driftCorrection
 
+    driftErrorAtCheckpoint = thisBot.distance*math.sin(abs(math.radians(thisBot.driftAngle)))
+    print("Derr at CP:" + str(driftErrorAtCheckpoint), file = sys.stderr)
 
     #default target
     target = nextChekpointTargetDir
 
-    #priority 1 reorient
-    if abs(diffAngle(thisBot.headingDir, thisBot.nextCheckpointDir)) > 90:
-        print("Reorienting", file = sys.stderr)
-        thrust =0
-
 
     #use boost at start
-    elif tactic == "fast" and boostUsed[botId] == False:
+    if tactic == "fast" and boostUsed[botId] == False:
         boostUsed[botId] =True
         thrust = "BOOST"
 
@@ -149,22 +158,28 @@ def handleBot(botId, botData, tactic):
         print("Strugle detected", file = sys.stderr)
         thrust = 100
 
-    elif abs(driftCorrection) >TRIVAL_DRIFT_CORRECTION_BOUND:
+    elif ((abs(driftCorrection) >TRIVAL_DRIFT_CORRECTION_BOUND and thisBot.distance> 2000) or
+                driftErrorAtCheckpoint > 0.8 * CHECKPOINT_RADIUS):
         print("nontrivial drift correction", file = sys.stderr)
         thrust = 100
 
     #prio 3 normal operation
     else:
-
         print("Normal Operation", file = sys.stderr)
-        turnsToChekpoint = thisBot.distance/thisBot.velocity
-        turnsToTurn = max(thisBot.directionChangeAfterNextCheckpoint-2*TURNING_SPEED, 0) /TURNING_SPEED  #litte bit of turning is free
+        coastingTurns = coast(d=thisBot.distance - CHECKPOINT_RADIUS, v = thisBot.velocity);
+        turnsToTurn = thisBot.directionChangeAfterNextCheckpoint /TURNING_SPEED  #litte bit of turning is free
+
+        print("Coasting turns to checkpoint:" + str(coastingTurns) + "turns to turn: " + str(turnsToTurn), file = sys.stderr)
+
 
         #TODO do somthing with drag instead of magic constant 2
-        if turnsToChekpoint < turnsToTurn/2:
+        if coastingTurns < turnsToTurn:
             print("Turning", file = sys.stderr)
-            thrust = 0
-            target = nextSectionBearing
+            if coastingTurns >3:
+                thrust = "SHIELD"
+            else:
+                thrust = 0
+            target = thisBot.nextSectionBearing
         else:
             thrust = 100
     outputDir(thisBot.loc, target, thrust)
@@ -172,6 +187,6 @@ def handleBot(botId, botData, tactic):
 print("Starting game loop", file =sys.stderr)
 # game loop
 while True:
-    bots = [handleData(debugPrint=True), handleData(), handleData(), handleData(),]
+    bots = [handleData(debugPrint=False), handleData(), handleData(), handleData(),]
     handleBot(0, bots, tactic="fast")
-    handleBot(1, bots, tactic="fast")
+    handleBot(1, bots, tactic="agr")
