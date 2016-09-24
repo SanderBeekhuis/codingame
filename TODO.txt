@@ -1,0 +1,5 @@
+-Do better agrasive boosting
+-Implement agrassive algorithm
+-Detect collsion and use shield
+-Maybe implement a state diagram
+-do collsion prevention
