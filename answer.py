@@ -1,5 +1,6 @@
 import sys
 import math
+import collections
 
 #Algorithm parameters
 DRIFT_CORRECTION_CAP =20 # max correction angle for drift
@@ -28,6 +29,14 @@ checkpoints = []
 finish = (-1, -1)
 boostUsed = False
 
+Bot = collections.namedtuple("Bot", ['loc',
+                        'velocity',
+                        'distance',
+                        'nextCheckpointDir',
+                        'movementDir',
+                        'headingDir',
+                        'driftAngle',
+                        'directionChangeAfterNextCheckpoint'])
 
 #initialization input
 lapCount = int(input())
@@ -70,7 +79,7 @@ def outputDir(loc, direction, thrust):
 def nextId(id):
     return (id +1) % checkpointCount
 
-def handleBot(botNo):
+def handleData(debugPrint = False):
     x, y, vx, vy, headingDir, nextCheckpointId = [int(i) for i in input().split()]
     checkpointloc = checkpoints[nextCheckpointId]
     loc= (x,y)
@@ -85,13 +94,6 @@ def handleBot(botNo):
     driftCorrection = min( DRIFT_CORRECTION_CAP, max (driftAngle , - DRIFT_CORRECTION_CAP))
     nextChekpointTargetDir = nextCheckpointDir + driftCorrection
 
-    print("Velocity " + str(velocity), file = sys.stderr)
-    print("Dist " + str(distance), file = sys.stderr)
-    print("CP Dir " + str(nextCheckpointDir), file = sys.stderr)
-    print("headingDir" + str(headingDir), file = sys.stderr)
-    print("movementDir" + str(movementDir), file = sys.stderr)
-    print("Diff CP vs movement" + str(diffAngle(nextCheckpointDir, movementDir)), file =sys.stderr)
-    print("Drift correction" + str(driftCorrection), file = sys.stderr)
 
     #determine target bearing of next section
     checkpointAfter = checkpoints[ nextId(nextCheckpointId) ]
@@ -101,20 +103,35 @@ def handleBot(botNo):
     #Q is it better to base this on orientattion or direction? Does it matter when we are in normal operation?
     directionChange = abs(diffAngle(nextCheckpointDir, nextSectionBearing))
 
-    print("Dir change"+ str(directionChange), file = sys.stderr)
-    print("", file = sys.stderr)
+    result =Bot(loc=loc,
+                velocity=velocity,
+                distance=distance,
+                headingDir=headingDir,
+                movementDir=movementDir,
+                nextCheckpointDir=nextCheckpointDir,
+                driftAngle=driftAngle,
+                directionChangeAfterNextCheckpoint=directionChange)
 
+    if debugPrint:
+        print(result, file = sys.stderr)
+    return result
+
+def handleBot(botId, botData):
+    thisBot = botData[botId]
+
+    driftCorrection = min( DRIFT_CORRECTION_CAP, max (thisBot.driftAngle , - DRIFT_CORRECTION_CAP))
+    nextChekpointTargetDir = thisBot.nextCheckpointDir + driftCorrection
 
 
     #priority 1 reorient
-    if abs(diffAngle(headingDir, nextCheckpointDir)) > 90:
+    if abs(diffAngle(thisBot.headingDir, thisBot.nextCheckpointDir)) > 90:
         print("Reorienting", file = sys.stderr)
         thrust =0
         target = nextChekpointTargetDir
 
 
     #prio 2: struglling
-    elif velocity < STRUGLE_FLOOR:
+    elif thisBot.velocity < STRUGLE_FLOOR:
         print("Strugle detected", file = sys.stderr)
         thrust = 100
         target = nextChekpointTargetDir
@@ -128,8 +145,8 @@ def handleBot(botNo):
     else:
 
         print("Normal Operation", file = sys.stderr)
-        turnsToChekpoint = distance/velocity
-        turnsToTurn = max(directionChange-2*TURNING_SPEED, 0) /TURNING_SPEED  #litte bit of turning is free
+        turnsToChekpoint = thisBot.distance/thisBot.velocity
+        turnsToTurn = max(thisBot.directionChangeAfterNextCheckpoint-2*TURNING_SPEED, 0) /TURNING_SPEED  #litte bit of turning is free
 
         #TODO do somthing with drag instead of magic constant 2
         if turnsToChekpoint < turnsToTurn/2:
@@ -139,17 +156,11 @@ def handleBot(botNo):
         else:
             thrust = 100
             target = nextChekpointTargetDir
-    outputDir(loc, target, thrust)
+    outputDir(thisBot.loc, target, thrust)
 
 print("Starting game loop", file =sys.stderr)
 # game loop
 while True:
-    handleBot(0)
-    handleBot(1)
-
-    ##READ out oppennets to throw input away
-    opponent1X, opponent1Y, _, _ ,_ ,_ = [int(i) for i in input().split()]
-    opponent2X, opponent2Y, _, _ ,_ ,_ = [int(i) for i in input().split()]
-
-    #print(checkpoints, file = sys.stderr)
-    #print(lapsComplete, file = sys.stderr)
+    bots = [handleData() for _ in range(4)]
+    handleBot(0, bots)
+    handleBot(1, bots)
