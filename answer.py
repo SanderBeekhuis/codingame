@@ -1,6 +1,7 @@
 import sys
 import math
 import collections
+import numbers
 
 #Algorithm parameters
 DRIFT_CORRECTION_CAP =20 # max correction angle for drift
@@ -27,7 +28,7 @@ FRICTION = 0.85
 lapsComplete = 0
 checkpoints = []
 finish = (-1, -1)
-boostUsed = False
+boostUsed = [False, False]
 
 Bot = collections.namedtuple("Bot", ['loc',
                         'velocity',
@@ -68,13 +69,13 @@ def computeDistance(a,b):
 def computeTarget(loc, direction):
     return (loc[0] + math.cos(math.radians(direction)) * 100, loc[1] + math.sin(math.radians(direction))*100 )
 
-def outputTarget(target, thrust):
-    print(str(int(target[0])) + " " + str(int(target[1])) + " " + str(int(thrust)))
-
 def outputDir(loc, direction, thrust):
+    if isinstance( thrust, numbers.Number):
+        thrust = int(thrust)
     print("Target direction: " +str(int(direction)) +
-        " Thrust: " + str(int(thrust)), file =sys.stderr)
-    outputTarget(computeTarget(loc, direction), thrust)
+        " Thrust: " + str(thrust), file =sys.stderr)
+    target = computeTarget(loc, direction)
+    print(str(int(target[0])) + " " + str(int(target[1])) + " " + str(thrust))
 
 def nextId(id):
     return (id +1) % checkpointCount
@@ -116,30 +117,37 @@ def handleData(debugPrint = False):
         print(result, file = sys.stderr)
     return result
 
-def handleBot(botId, botData):
+def handleBot(botId, botData, tactic):
+    assert  (tactic == "agr" or tactic == "fast")
     thisBot = botData[botId]
 
     driftCorrection = min( DRIFT_CORRECTION_CAP, max (thisBot.driftAngle , - DRIFT_CORRECTION_CAP))
     nextChekpointTargetDir = thisBot.nextCheckpointDir + driftCorrection
 
 
+
+    #default target
+    target = nextChekpointTargetDir
+
     #priority 1 reorient
     if abs(diffAngle(thisBot.headingDir, thisBot.nextCheckpointDir)) > 90:
         print("Reorienting", file = sys.stderr)
         thrust =0
-        target = nextChekpointTargetDir
 
+
+    #use boost at start
+    elif tactic == "fast" and boostUsed[botId] == False:
+        boostUsed[botId] =True
+        thrust = "BOOST"
 
     #prio 2: struglling
     elif thisBot.velocity < STRUGLE_FLOOR:
         print("Strugle detected", file = sys.stderr)
         thrust = 100
-        target = nextChekpointTargetDir
 
     elif abs(driftCorrection) >TRIVAL_DRIFT_CORRECTION_BOUND:
         print("nontrivial drift correction", file = sys.stderr)
         thrust = 100
-        target = nextChekpointTargetDir
 
     #prio 3 normal operation
     else:
@@ -155,12 +163,11 @@ def handleBot(botId, botData):
             target = nextSectionBearing
         else:
             thrust = 100
-            target = nextChekpointTargetDir
     outputDir(thisBot.loc, target, thrust)
 
 print("Starting game loop", file =sys.stderr)
 # game loop
 while True:
     bots = [handleData() for _ in range(4)]
-    handleBot(0, bots)
-    handleBot(1, bots)
+    handleBot(0, bots, tactic="fast")
+    handleBot(1, bots, tactic="fast")
