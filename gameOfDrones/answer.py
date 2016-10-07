@@ -18,6 +18,15 @@ class Drone:
     def printMove(self):
         print(str(self.targetZone.pos.x) + " " + str(self.targetZone.pos.y))
 
+    def setTargetZoneToClosest(self):
+        minDist = 10000
+        target = -1
+        for z in zones:
+            if distance(self.pos, z.pos) < minDist:
+                target = z
+                minDist = distance(self.pos, z.pos)
+        self.targetZone = target
+
 
 class Zone:
     def __init__(self, pos):
@@ -53,12 +62,6 @@ while True:
 
     for d in drones:
         if d.targetZone == None:
-            minDist = 10000
-            target = -1
-            for z in zones:
-                if distance(d.pos, z.pos) < minDist:
-                    target = z
-                    minDist = distance(d.pos, z.pos)
-            d.targetZone = target
+            d.setTargetZoneToClosest()
 
         d.printMove()
