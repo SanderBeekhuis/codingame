@@ -1,3 +1,5 @@
 [GoD] 
 06 - 10 - 2016 First bot 		511
 08 - 10 - 2016 Redundant remove bot 	301
+09 - 10 - 2016 Same algo		297/1950
+09 - 10 - 2016 Move hopeless drones 	229

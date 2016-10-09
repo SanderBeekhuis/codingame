@@ -1,4 +1,10 @@
-#TODO symmetry breaking/ release drones in losing situation
+#TODO some measure of closness in choosing targets/improve priority
+#TODO add some kind of defense (see incoming drone and stay at zone). In first version only a shortranged defense is necesarry)
+#IDEA evalute defense againts gettin more zones (distance ivaders versus distance cap)
+        #if cap is closer maybe it's beter to cap? or is defence always betters
+#FXME sometiems two drones go to the same open control zone
+#REMARK better in versus compared to team games (prob because fixing your and your enemeies drones is positive in 1v1 but not so much in team)
+        #Potentially diffe algo on player count
 
 import sys
 import math
@@ -58,32 +64,37 @@ class Zone:
     def __init__(self,id, pos):
         self.pos, self.id, self.controller, self.drones, self.playerDronesInZone = pos, id, -1, [], [0]*playerCount
 
-    def _max_enemies(self):
+    @property
+    def maxEnemyCount(self):
+        """ Current enemy count of the enemy with the most drones in this zone"""
         return max(self.playerDronesInZone[:playerId] + self.playerDronesInZone[playerId+1:])
 
-    def _future_drones(self):
+    @property
+    def futureCount(self):
+        """Expected number of drones in the future """
         return len(self.drones)
+
+    @property
+    def control(self):
+        if self.controller == playerId:
+            return True
+        return False
 
     def priority(self):
         #higer prio if number of enemies and our future drones are high
-        enCount = self._max_enemies()
-        futureCount = self._future_drones()
-        control = False
-        if self.controller == playerId:
-            control = True
-        if futureCount >= enCount and control:
+        if self.futureCount >= self.maxEnemyCount and self.control:
             return -100
 
-        if futureCount >= enCount + 1:
+        if self.futureCount >= self.maxEnemyCount + 1:
             return -100
 
-        return - enCount + futureCount
+        return - self.maxEnemyCount + self.futureCount
+
 
     def release_redundant_drones(self):
         #init vars
-        enCount = self._max_enemies()
-        ourCount = self.playerDronesInZone[playerId]
-        futureCount = self._future_drones()
+        enCount = self.maxEnemyCount
+        futureCount = self.futureCount
 
         control = False
         if self.controller == playerId:
@@ -95,17 +106,32 @@ class Zone:
         else:
             goalCount = enCount +1
 
-
         #delete redundant drones
         self._release_drones(futureCount - goalCount)
 
+    def release_if_hopeless(self):
+        """Release all drones if obtaining control of this zone seems hopeless"""
+        if (not self.control) and self.futureCount <= self.maxEnemyCount:
+            self._release_drones("all")
+
+
 
     def _release_drones(self, count):
-        if count>0:
-            print("Releasing {} drones from Z{}@({},{})".format(count, self.id, self.pos.x, self.pos.y), file= sys.stderr)
+        """Releases required number of drones. Also accepts string "all" """
+
+        if isinstance(count, int) and  count<=0:
+            return
+
+        if count=="all":
+            for d in self.drones:
+                d.find_target()
+        else:
             self.drones.sort( key = lambda d: distance(d.pos, self.pos))
             for d in self.drones[-count:]:
                 d.find_target()
+
+        print("Releasing {} drones from Z{}@({},{})".format(count, self.id, self.pos.x, self.pos.y), file= sys.stderr)
+
 
 
     def __repr__(self):
@@ -154,6 +180,8 @@ while True:
     #make decisions
     for z in zones:
         z.release_redundant_drones()
+    for z in zones:
+        z.release_if_hopeless()
 
     #handle drones
     for d in drones:
