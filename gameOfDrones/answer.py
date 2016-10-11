@@ -1,13 +1,16 @@
-#TODO PRIO First free drones, then assign all free droones
-#	Or even more radical: assign all drones every turn
-# 	Defense takes prio over attack, order of closeness
+"""
+This algorithm works in a taskbased manner.
+Zone create different tasks with different priorities.
+These Tasks are assigned to drones on bassis of both priority(first) and
+closness(second) and are then executed
+"""
 
-#TODO some measure of closness in choosing targets/improve priority
-#TODO add some kind of defense (see incoming drone and stay at zone). In first version only a shortranged defense is necesarry)
+
+#TODO add some kind of defense task (see incoming drone and recruit at zone).
+# In first version only a shortranged defense is necesarry)
+#TODO Better tradeoff betwee of closness and priority in choosing targets
 #IDEA evalute defense againts gettin more zones (distance ivaders versus distance cap)
 #	If cap is closer maybe it's beter to cap? or is defence always betters
-
-#FXME sometiems two drones go to the same open control zone
 
 #TODO intra-zone positioning while holding zone
 
@@ -20,60 +23,95 @@
 import sys
 import math
 import collections
+import copy
+
+
+
+#prereq
+Pos = collections.namedtuple("Pos", ["x", "y"])
+
 
 #constants
 ZONERADIUS =100
+MAPCENTRE = Pos(2000,900)
 
 #init data structure
 zones = []
 drones = []
-Pos = collections.namedtuple("Pos", ["x", "y"])
+
+#define helper functions
+def distance(a, b):
+    return math.sqrt((a.x -b.x) **2 + (a.y-b.y)**2)
+
+#define classes
+class Task:
+    """
+        Tasks are atomic assignments. Either all drones should be found or the enitre operation is cancelled.
+        """
+    def __init__(self, dronesRequired, zone):
+        self.dronesRequired, self.zone = dronesRequired, zone
+        self.pos = zone.pos
+
+    def __str__(self):
+        return "{} with Zone {} and Prio {}".format(type(self).__name__, self.zone, self.priority)
+
+    @property
+    def priority(self):
+        """priority of this task. Higher is more important"""
+        raise NotImplementedError()
+
+    def acquire_drones(self, freedrones):
+        """acquire closest drones for this task.
+        Subclasses can overwrite this method to for example conditnally acquire drones  """
+        freedrones.sort(key=lambda d:distance(d.pos, self.zone.pos))
+        for _ in range(self.dronesRequired):
+            d = freedrones.pop(0)
+            d.task = self
+
+class AttackTask(Task):
+    """moving to some uncontrolled zone to acquire it """
+    @property
+    def priority(self):
+        """priority of this task. Higher is more important"""
+        return 1000 + 100 - self.dronesRequired
+
+class MaintainControlTask(Task):
+    """idiling at a zone to maintain Control """
+    @property
+    def priority(self):
+        """priority of this task. Higher is more important"""
+        return 2000
+
+class IdleTask(Task):
+    """assigned if no other task could be found """
+    def __init__(self):
+        self.dronesRequired = 1
+        self.pos = MAPCENTRE
+        self.zone = None
+
+    @property
+    def priority(self):
+        """priority of this task. Higher is more important"""
+        return -1000
+
+    def acquire_drones(self, freedrones):
+        """ overwrite without sorting """
+        d = freedrones.pop()
+        d.task = self
 
 class Drone:
     def __init__(self, id):
-        self.pos, self._targetZone, self.id = None, None, id
+        self.pos, self.task, self.id = None, None, id
 
     def print_move(self):
-        print(str(self.targetZone.pos.x) + " " + str(self.targetZone.pos.y))
+        print(str(self.task.pos.x) + " " + str(self.task.pos.y))
 
-    def find_target(self):
-        sortedZones = sorted (zones, key=lambda z: z.priority())
-        if sortedZones[-1].priority() < -50:
-            self.set_target_zone_to_closest()
-            print("D{} setting target to CLOSEST zone {}".format(self.id, self.targetZone), file=sys.stderr)
-
-        else:
-            self.targetZone = sortedZones[-1]
-            print("D{} setting target PRIO zone {}".format(self.id, self.targetZone), file=sys.stderr)
-
-    def set_target_zone_to_closest(self):
-        minDist = 10000
-        target = -1
-        for z in zones:
-            if distance(self.pos, z.pos) < minDist:
-                target = z
-                minDist = distance(self.pos, z.pos)
-        self.targetZone = target
-
-    def __repr__(self):
-        return "D{}".format(self.id)
-
-    def _set_target_zone(self, target):
-        try:
-            self.targetZone.drones.remove(self)
-        except AttributeError:
-            pass #do nothing is previous target ws None
-        self._targetZone = target
-        target.drones.append(self)
-
-    def _get_target_zone(self):
-        return self._targetZone
-
-    targetZone = property(_get_target_zone, _set_target_zone)
+    def __str__(self):
+        return "D{} Task:{}".format(self.id, self.task)
 
 class Zone:
     def __init__(self,id, pos):
-        self.pos, self.id, self.controller, self.drones, self.playerDronesInZone = pos, id, -1, [], [0]*playerCount
+        self.pos, self.id, self.controller, self.playerDronesInZone = pos, id, -1, [0]*playerCount
 
     @property
     def maxEnemyCount(self):
@@ -81,82 +119,21 @@ class Zone:
         return max(self.playerDronesInZone[:playerId] + self.playerDronesInZone[playerId+1:])
 
     @property
-    def futureCount(self):
-        """Expected number of drones in the future """
-        return len(self.drones)
-
-    @property
     def control(self):
         if self.controller == playerId:
             return True
         return False
 
-    def priority(self):
-        #higer prio if number of enemies and our future drones are high
-        if self.futureCount >= self.maxEnemyCount and self.control:
-            return -100
-
-        if self.futureCount >= self.maxEnemyCount + 1:
-            return -100
-
-        return - self.maxEnemyCount + self.futureCount
-
-
-    def release_redundant_drones(self):
-        #init vars
-        enCount = self.maxEnemyCount
-        futureCount = self.futureCount
-
-        control = False
-        if self.controller == playerId:
-            control = True
-
-        #goalcount is the number of drones requierd to acquire and/or maintain control
-        if control:
-            goalCount = enCount
+    def tasks(self):
+        """Returns a list of tasks this zone wants to see fullfilled """
+        if self.control:
+            return [MaintainControlTask(self.maxEnemyCount, self)]
         else:
-            goalCount = enCount +1
+            return [AttackTask(self.maxEnemyCount+1, self)]
 
-        #delete redundant drones
-        self._release_drones(futureCount - goalCount)
+    def __str__(self):
+        return "Z{} Cont:{}".format(self.id, self.controller)
 
-    def release_if_hopeless(self):
-        """Release all drones if obtaining control of this zone seems hopeless"""
-        if (not self.control) and self.futureCount <= self.maxEnemyCount:
-            self._release_drones("all")
-
-
-
-    def _release_drones(self, count):
-        """Releases required number of drones. Also accepts string "all" """
-
-        if isinstance(count, int) and  count<=0:
-            return
-
-        if count=="all":
-            for d in self.drones:
-                d.find_target()
-        else:
-            self.drones.sort( key = lambda d: distance(d.pos, self.pos))
-            for d in self.drones[-count:]:
-                d.find_target()
-
-        print("Releasing {} drones from Z{}@({},{})".format(count, self.id, self.pos.x, self.pos.y), file= sys.stderr)
-
-
-
-    def __repr__(self):
-        return "Z{} Prio:{} Cont:{} Drone:{}".format(self.id, self.priority(), self.controller, self.drones)
-
-#define helper functions
-def distance(a, b):
-    return math.sqrt((a.x -b.x) **2 + (a.y-b.y)**2)
-
-
-# p: number of players in the game (2 to 4 players)
-# id: ID of your player (0, 1, 2, or 3)
-# d: number of drones in each team (3 to 11)
-# z: number of zones on the map (4 to 8)
 playerCount, playerId, droneCount, zoneCount = [int(i) for i in input().split()]
 for id in range(zoneCount):
     # x: corresponds to the position of the center of a zone. A zone is a circle with a radius of 100 units.
@@ -185,19 +162,32 @@ while True:
                 d.pos = pos
 
     #print status
-    for z in zones:
-        print(z, file = sys.stderr)
+    #for z in zones:
+    #    print(z, file = sys.stderr)
 
     #make decisions
+    tasks = []
+    freedrones = copy.copy(drones)
     for z in zones:
-        z.release_redundant_drones()
-    for z in zones:
-        z.release_if_hopeless()
+        tasks += z.tasks()
+    for _ in drones:
+        tasks += [IdleTask()]
 
-    #handle drones
+    tasks.sort(key=lambda t: t.priority, reverse=True)
+
+    print("TASKS", file=sys.stderr)
+    for t in tasks:
+        print(t, file=sys.stderr)
+
+    for t in tasks:
+        if len(freedrones) >= t.dronesRequired:
+            t.acquire_drones(freedrones)
+    assert len(freedrones) == 0
+
+    print("DRONES", file=sys.stderr)
     for d in drones:
-        #fallback targeting
-        if d.targetZone == None:
-            d.set_target_zone_to_closest()
+        print(d, file=sys.stderr)
 
+    #move drones
+    for d in drones:
         d.print_move()
