@@ -1,10 +1,21 @@
+#TODO PRIO First free drones, then assign all free droones
+#	Or even more radical: assign all drones every turn
+# 	Defense takes prio over attack, order of closeness
+
 #TODO some measure of closness in choosing targets/improve priority
 #TODO add some kind of defense (see incoming drone and stay at zone). In first version only a shortranged defense is necesarry)
 #IDEA evalute defense againts gettin more zones (distance ivaders versus distance cap)
-        #if cap is closer maybe it's beter to cap? or is defence always betters
+#	If cap is closer maybe it's beter to cap? or is defence always betters
+
 #FXME sometiems two drones go to the same open control zone
+
+#TODO intra-zone positioning while holding zone
+
 #REMARK better in versus compared to team games (prob because fixing your and your enemeies drones is positive in 1v1 but not so much in team)
-        #Potentially diffe algo on player count
+#	-Potentially differ algo on player count
+#	-DronePerZoneRatio = drones/zones
+#	-If we fix more then constant times this ratio on a zone, drop the zone altogether
+#	-e.g 2players never drop, 3 players drop with more then 3*DPZratio 4 players 2 times DPZ ratio
 
 import sys
 import math
