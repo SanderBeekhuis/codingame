@@ -9,6 +9,7 @@ closness(second) and are then executed
 #TODO add some kind of defense task (see incoming drone and recruit at zone).
 # In first version only a shortranged defense is necesarry)
 #TODO Better tradeoff betwee of closness and priority in choosing targets
+#       Maybe let drones pick closeby tasks (between same prio) instead of tasks chosing the drone
 #IDEA evalute defense againts gettin more zones (distance ivaders versus distance cap)
 #	If cap is closer maybe it's beter to cap? or is defence always betters
 
@@ -25,15 +26,9 @@ import math
 import collections
 import copy
 
-
-
-#prereq
-Pos = collections.namedtuple("Pos", ["x", "y"])
-
-
 #constants
 ZONERADIUS =100
-MAPCENTRE = Pos(2000,900)
+IDLEPOS = None
 
 #init data structure
 zones = []
@@ -44,6 +39,8 @@ def distance(a, b):
     return math.sqrt((a.x -b.x) **2 + (a.y-b.y)**2)
 
 #define classes
+Pos = collections.namedtuple("Pos", ["x", "y"])
+
 class Task:
     """
         Tasks are atomic assignments. Either all drones should be found or the enitre operation is cancelled.
@@ -86,7 +83,7 @@ class IdleTask(Task):
     """assigned if no other task could be found """
     def __init__(self):
         self.dronesRequired = 1
-        self.pos = MAPCENTRE
+        self.pos = IDLEPOS
         self.zone = None
 
     @property
@@ -104,7 +101,7 @@ class Drone:
         self.pos, self.task, self.id = None, None, id
 
     def print_move(self):
-        print(str(self.task.pos.x) + " " + str(self.task.pos.y))
+        print(str(int(self.task.pos.x)) + " " + str(int(self.task.pos.y)))
 
     def __str__(self):
         return "D{} Task:{}".format(self.id, self.task)
@@ -135,10 +132,14 @@ class Zone:
         return "Z{} Cont:{}".format(self.id, self.controller)
 
 playerCount, playerId, droneCount, zoneCount = [int(i) for i in input().split()]
+idlex, idley = 0, 0
 for id in range(zoneCount):
-    # x: corresponds to the position of the center of a zone. A zone is a circle with a radius of 100 units.
     x, y = [int(j) for j in input().split()]
     zones.append( Zone(id=id,  pos=Pos(x,y)))
+    idlex += x/zoneCount
+    idley += y/zoneCount
+IDLEPOS = Pos(idlex,idley)
+
 for id in range(droneCount):
     drones.append( Drone(id) )
 

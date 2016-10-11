@@ -5,7 +5,8 @@
 09 - 10 - 2016 Move hopeless drones 	229
 11 - 10 - 2016 Same algo 		248
 11 - 10 - 2016 Same algo, lucky run	219
-11 - 10 - 2016 Task algo
+11 - 10 - 2016 Task algo		200
+11 - 10 - 2016 Beter idled pos		191
 
 
 [CSB] Coders strike back
