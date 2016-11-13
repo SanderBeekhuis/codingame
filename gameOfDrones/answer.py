@@ -6,10 +6,11 @@ closness(second) and are then executed
 """
 
 
-#TODO add some kind of defense task (see incoming drone and recruit at zone).
-# In first version only a shortranged defense is necesarry)
+#TODO add some kind of defense task (see incoming drone and recruit at zone). Using that the dronelist now has all drones (maybe track direction and speed in drones)
 #TODO Better tradeoff betwee of closness and priority in choosing targets
 #       Maybe let drones pick closeby tasks (between same prio) instead of tasks chosing the drone
+# Or antoerd IDEA First free all drones, then assign inteligently (see above)
+
 #IDEA evalute defense againts gettin more zones (distance ivaders versus distance cap)
 #	If cap is closer maybe it's beter to cap? or is defence always betters
 
@@ -58,7 +59,7 @@ class Task:
         raise NotImplementedError()
 
     def acquire_drones(self, freedrones):
-        """acquire closest drones for this task.
+        """Acquire closest drones for this task.
         Subclasses can overwrite this method to for example conditnally acquire drones  """
         freedrones.sort(key=lambda d:distance(d.pos, self.zone.pos))
         for _ in range(self.dronesRequired):
@@ -73,14 +74,14 @@ class AttackTask(Task):
         return 1000 + 100 - self.dronesRequired
 
 class MaintainControlTask(Task):
-    """idiling at a zone to maintain Control """
+    """Idiling at a zone to maintain Control """
     @property
     def priority(self):
         """priority of this task. Higher is more important"""
         return 2000
 
 class IdleTask(Task):
-    """assigned if no other task could be found """
+    """Assigned if no other task could be found """
     def __init__(self):
         self.dronesRequired = 1
         self.pos = IDLEPOS
@@ -97,14 +98,27 @@ class IdleTask(Task):
         d.task = self
 
 class Drone:
-    def __init__(self, id):
-        self.pos, self.task, self.id = None, None, id
+    def __init__(self, id, controller):
+        self.pos, self._task, self.id, self.controller = None, None, id, controller
 
     def print_move(self):
+        assert self.controller == playerId
         print(str(int(self.task.pos.x)) + " " + str(int(self.task.pos.y)))
 
     def __str__(self):
-        return "D{} Task:{}".format(self.id, self.task)
+        result = "P{}D{}".format(self.controller, self.id)
+        if controller == playerId:
+            result +=  " Task:{}".format(self.task)
+        return result;
+
+    @property
+    def task(self):
+        return self._task
+
+    @task.setter
+    def task(self, value):
+        assert self.controller == playerId
+        self._task = value
 
 class Zone:
     def __init__(self,id, pos):
@@ -131,6 +145,7 @@ class Zone:
     def __str__(self):
         return "Z{} Cont:{}".format(self.id, self.controller)
 
+#INIT
 playerCount, playerId, droneCount, zoneCount = [int(i) for i in input().split()]
 idlex, idley = 0, 0
 for id in range(zoneCount):
@@ -140,35 +155,28 @@ for id in range(zoneCount):
     idley += y/zoneCount
 IDLEPOS = Pos(idlex,idley)
 
-for id in range(droneCount):
-    drones.append( Drone(id) )
+for controller in range(playerCount):
+    for id in range(droneCount):
+        drones.append( Drone(id, controller) )
 
-# game loop
+print("Init complete", file=sys.stderr)
+
+
+#GAME LOOP
 while True:
     #update gamestate
     for z in zones:
-        test = int(input())
-        z.controller = test  # ID of the team controlling the zone (0, 1, 2, or 3) or -1 if it is not controlled. The zones are given in the same order as in the initialization.
-        z.playerDronesInZone = [0]*playerCount
-    for i in range(playerCount):
-        for d in drones:
-            x, y = [int(k) for k in input().split()]
-            pos = Pos(x,y)
-            #Add drone to area if it's in it
-            for z in zones:
-                if distance(pos, z.pos)<ZONERADIUS:
-                    z.playerDronesInZone[i]+=1
-            #update player drone positions
-            if i == playerId:
-                d.pos = pos
+        z.controller = int(input()) # ID of the team controlling the zone (0, 1, 2, or 3) or -1 if it is not controlled. The zones are given in the same order as in the initialization.
+        z.playerDronesInZone = [0]*playerCount #Clear
+    for i in range(playerCount*droneCount):
+        x, y = [int(k) for k in input().split()]
+        drones[i].pos = Pos(x,y)
 
-    #print status
-    #for z in zones:
-    #    print(z, file = sys.stderr)
+    print("Input read", file=sys.stderr)
 
     #make decisions
     tasks = []
-    freedrones = copy.copy(drones)
+    freedrones = list(filter( lambda d: d.controller == playerId, drones))
     for z in zones:
         tasks += z.tasks()
     for _ in drones:
@@ -190,5 +198,5 @@ while True:
         print(d, file=sys.stderr)
 
     #move drones
-    for d in drones:
+    for d in filter(lambda d: d.controller == playerId, drones):
         d.print_move()
