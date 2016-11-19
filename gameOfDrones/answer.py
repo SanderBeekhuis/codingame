@@ -28,8 +28,12 @@ import collections
 import copy
 
 #constants
-ZONERADIUS =100
+ZONERADIUS = 100
+MOVESPEED = 100
+
+#tuning
 IDLEPOS = None
+ADVANCEWARNINGRADIUS =1000
 
 #init data structure
 zones = []
@@ -99,7 +103,7 @@ class IdleTask(Task):
 
 class Drone:
     def __init__(self, id, controller):
-        self.pos, self._task, self.id, self.controller = None, None, id, controller
+        self._pos, self._prevpos, self._task, self.id, self.controller = None, None, None, id, controller
 
     def print_move(self):
         assert self.controller == playerId
@@ -120,14 +124,22 @@ class Drone:
         assert self.controller == playerId
         self._task = value
 
-class Zone:
-    def __init__(self,id, pos):
-        self.pos, self.id, self.controller, self.playerDronesInZone = pos, id, -1, [0]*playerCount
+    @property
+    def pos(self):
+        return self._pos
+
+    @pos.setter
+    def pos(self, value):
+        self._prevpos = self._pos
+        self._pos = value
 
     @property
-    def maxEnemyCount(self):
-        """ Current enemy count of the enemy with the most drones in this zone"""
-        return max(self.playerDronesInZone[:playerId] + self.playerDronesInZone[playerId+1:])
+    def prevpos(self):
+        return self._prevpos
+
+class Zone:
+    def __init__(self,id, pos):
+        self.pos, self.id, self.controller = pos, id, -1
 
     @property
     def control(self):
@@ -135,12 +147,39 @@ class Zone:
             return True
         return False
 
-    def tasks(self):
+
+    def _maxEnemyCount(self, dronesToCount):
+        """ Current enemy count of the enemy with the most drones in this zone"""
+        return max(dronesToCount[:playerId] + dronesToCount[playerId+1:])
+
+    def tasks(self, drones):
         """Returns a list of tasks this zone wants to see fullfilled """
+        #calculate intemediatairy data
+
+        playerDronesInZone = [0]*playerCount #init
+        playerDronesInbound = [0]*playerCount
+        inboundDrones = []
+
+        for d in drones:
+            dist = distance(d.pos, self.pos)
+            if d.prevpos is None:
+                prevdist = dist
+            else:
+                prevdist = distance(d.prevpos, self.pos)
+            if dist<ZONERADIUS:
+                playerDronesInZone[d.controller]+=1
+            elif dist < ADVANCEWARNINGRADIUS and dist < (prevdist - .95 * MOVESPEED):
+                inboundDrones.append({"drone": d, "dist":dist})
+                playerDronesInbound[d.controller] += 1
+
+        print( "Z{} Cont:{} Drones:{}{}".format(self.id, self.controller, playerDronesInZone, playerDronesInbound),file=sys.stderr)
+
+
+        #return tasks
         if self.control:
-            return [MaintainControlTask(self.maxEnemyCount, self)]
+            return [ MaintainControlTask(self._maxEnemyCount(playerDronesInZone), self) ]
         else:
-            return [AttackTask(self.maxEnemyCount+1, self)]
+            return [ AttackTask(self._maxEnemyCount(playerDronesInZone)+1, self) ]
 
     def __str__(self):
         return "Z{} Cont:{}".format(self.id, self.controller)
@@ -167,7 +206,6 @@ while True:
     #update gamestate
     for z in zones:
         z.controller = int(input()) # ID of the team controlling the zone (0, 1, 2, or 3) or -1 if it is not controlled. The zones are given in the same order as in the initialization.
-        z.playerDronesInZone = [0]*playerCount #Clear
     for i in range(playerCount*droneCount):
         x, y = [int(k) for k in input().split()]
         drones[i].pos = Pos(x,y)
@@ -178,7 +216,7 @@ while True:
     tasks = []
     freedrones = list(filter( lambda d: d.controller == playerId, drones))
     for z in zones:
-        tasks += z.tasks()
+        tasks += z.tasks(drones)
     for _ in drones:
         tasks += [IdleTask()]
 
